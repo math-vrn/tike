@@ -288,11 +288,6 @@ def project(
         (True, y-axis first axis) or a stack of radiographs
         (False, theta first axis).
 
-    Returns
-    -------
-    ndarray
-        3D tomographic data.
-
     """
     oy, ox, oz = obj.shape
     dt = theta.size
