@@ -29,23 +29,25 @@ class MPICommunicator(object):
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
-        logger.info("Hello from rank {}.".format(self.rank))
+        logger.info("Node {:,d} is running.".format(self.rank))
 
     def scatter(self, *args):
         """Send and recieve constant data that must be divided."""
-        for i in range(len(args)):
+        out = list()
+        for arg in args:
             if self.rank == 0:
-                chunks = np.array_split(args[i], self.size)
+                chunks = np.array_split(arg, self.size)
             else:
                 chunks = None
-            args[i] = self.comm.scatter(chunks, root=0)
-        return args
+            out.append(self.comm.scatter(chunks, root=0))
+        return out
 
     def broadcast(self, *args):
         """Synchronize parameters that are the same for all processses."""
-        for i in range(len(args)):
-            args[i] = self.comm.bcast(args[i], root=0)
-        return args
+        out = list()
+        for arg in args:
+            out.append(self.comm.bcast(arg, root=0))
+        return out
 
     def get_ptycho_slice(self, arg):
         """Switch to arg slicing for the pytchography problem."""
@@ -58,3 +60,9 @@ class MPICommunicator(object):
         arg = self.comm.allgather(arg)  # Theta, V, H
         whole = np.concatenate(arg, axis=0)
         return np.array_split(whole, self.size, axis=1)[self.rank]
+
+    def gather(self, arg, root=0, axis=0):
+        arg = self.comm.gather(arg, root=root)  # Theta, V, H
+        if self.rank == 0:
+            return np.concatenate(arg, axis=axis)
+        return None

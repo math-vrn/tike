@@ -258,8 +258,8 @@ def forward(
     **kwargs
 ):
     """Compute line integrals over an obj; i.e. simulate data acquisition."""
-    Lr = project(obj=obj.real, theta=theta, ncore=1,)
-    Li = project(obj=obj.imag, theta=theta, ncore=1,)
+    Lr = project(obj=obj.real, theta=theta,)
+    Li = project(obj=obj.imag, theta=theta,)
     line_integrals = np.empty(Lr.shape, dtype=complex)
     line_integrals.real = Lr
     line_integrals.imag = Li
