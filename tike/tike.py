@@ -56,7 +56,7 @@ import logging
 import tike.tomo
 import tike.ptycho
 from tike.constants import *
-from mpi4py import MPI
+from tike.communicator import MPICommunicator
 
 __author__ = "Doga Gursoy, Daniel Ching"
 __copyright__ = "Copyright (c) 2018, UChicago Argonne, LLC."
@@ -67,10 +67,6 @@ __all__ = ['admm',
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-comm = MPI.COMM_WORLD
-mpi_rank = comm.Get_rank()
-mpi_size = comm.Get_size()
 
 
 def _combined_interface(
@@ -122,43 +118,21 @@ def admm(
         reconstruction algorithms.
 
     """
-    if mpi_rank == 0:
-        Z, X, Y = obj.shape[0:3]
-        T = theta.size
-        x = obj
-        psi = np.ones([T, Z, Y], dtype=obj.dtype)
-        split_psi = np.array_split(psi, mpi_size)
-        split_data = np.array_split(data, mpi_size)
-        split_theta = np.array_split(theta, mpi_size)
-        split_v = np.array_split(v, mpi_size)
-        split_h = np.array_split(h, mpi_size)
-    else:
-        split_psi = None
-        split_data = None
-        split_theta = None
-        split_v = None
-        split_h = None
-        x = None
-    # Scatter psi, data, v, h, hobj, lamda
-    psi = comm.scatter(split_psi, root=0)
-    data = comm.scatter(split_data, root=0)
-    theta = comm.scatter(split_theta, root=0)
-    v = comm.scatter(split_v, root=0)
-    h = comm.scatter(split_h, root=0)
+    comm = MPICommunicator()
+    voxelsize, probe, theta, energy, niter, rho, gamma, V, H = \
+        comm.broadcast(voxelsize, probe, theta, energy, niter, rho, gamma,
+                       obj.shape[0], obj.shape[2])
+    x, data, h, v = comm.scatter(obj, data, h, v)
+    psi = np.ones([
+        len(data),  # The number of views.
+        V,  # The height of psi.
+        H,  # The width of psi.
+    ], dtype=x.dtype)
     lamda = np.zeros_like(psi)
     hobj = np.ones_like(psi)
-    # bcast probe, rho, gamma, voxelsize, energy
-    probe = comm.bcast(probe, root=0)
-    rho = comm.bcast(rho, root=0)
-    gamma = comm.bcast(rho, root=0)
-    voxelsize = comm.bcast(voxelsize, root=0)
-    energy = comm.bcast(energy, root=0)
-
-    logger.info("Rank {} gets {} views.".format(mpi_rank, len(theta)))
-
     for i in range(niter):
         logger.info("ADMM iteration {}".format(i))
-        # Ptychography parallel
+        # Ptychography
         for view in range(len(psi)):
             psi[view] = tike.ptycho.reconstruct(data=data[view],
                                                 probe=probe,
@@ -169,28 +143,16 @@ def admm(
                                                 reg=hobj[view],
                                                 lamda=lamda[view], **kwargs)
         phi = -1j / wavenumber(energy) * np.log(psi + lamda / rho) / voxelsize
-        # Recombine phi
-        phi = comm.gather(phi, root=0)
-        # Tomography single
-        if mpi_rank == 0:
-            phi = np.concatenate(phi, axis=0)
-            x = tike.tomo.reconstruct(obj=x,
-                                      theta=theta,
-                                      line_integrals=phi,
-                                      algorithm='grad', reg_par=-1,
-                                      niter=1, **kwargs)
-        # bcast x
-        x = comm.bcast(x, root=0)
+        # Tomography
+        phi = comm.get_tomo_slice(phi)
+        x = tike.tomo.reconstruct(obj=x,
+                                  theta=theta,
+                                  line_integrals=phi,
+                                  algorithm='grad', reg_par=-1,
+                                  niter=1, **kwargs)
         # Lambda update.
         line_integrals = tike.tomo.forward(obj=x, theta=theta) * voxelsize
         hobj = np.exp(1j * wavenumber(energy) * line_integrals)
+        hobj = comm.get_ptycho_slice(hobj)
         lamda = lamda + rho * (psi - hobj)
-
-        # # Update residuals.
-        # r = 1 / M * np.sqrt(np.sum(np.square(np.abs(psi - hobj)),
-        #                            axis=(-1, -2)))
-        # s = rho * np.sqrt(np.sum(np.square(np.abs(x1 - x0)),
-        #                          axis=(-1, -2)))
-        # if r < epsilon_prime and s < epsilon_dual:
-        #     pass
     return x

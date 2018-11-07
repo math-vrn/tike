@@ -186,13 +186,13 @@ def reconstruct(
                       theta=theta,
                       algorithm=algorithm,
                       init_recon=obj.real,
-                      num_iter=niter, **kwargs,
+                      num_iter=niter, ncore=1, **kwargs,
                       )
     Li = tomopy.recon(tomo=line_integrals.imag,
                       theta=theta,
                       algorithm=algorithm,
                       init_recon=obj.imag,
-                      num_iter=niter, **kwargs,
+                      num_iter=niter, ncore=1, **kwargs,
                       )
     recon = np.empty(Lr.shape, dtype=complex)
     recon.real = Lr
@@ -258,8 +258,8 @@ def forward(
     **kwargs
 ):
     """Compute line integrals over an obj; i.e. simulate data acquisition."""
-    Lr = project(obj=obj.real, theta=theta)
-    Li = project(obj=obj.imag, theta=theta)
+    Lr = project(obj=obj.real, theta=theta, ncore=1,)
+    Li = project(obj=obj.imag, theta=theta, ncore=1,)
     line_integrals = np.empty(Lr.shape, dtype=complex)
     line_integrals.real = Lr
     line_integrals.imag = Li
