@@ -128,7 +128,8 @@ def admm(
     comm = MPICommunicator()
     voxelsize, probe, theta, energy, niter, rho, gamma, V, H = \
         comm.broadcast(voxelsize, probe, theta, energy, niter, rho, gamma,
-                       obj.shape[0], obj.shape[2])
+                       0 if obj is None else obj.shape[0],
+                       0 if obj is None else obj.shape[2])
     x, data, h, v = comm.scatter(obj, data, h, v)
     psi = np.ones([
         len(data),  # The number of views.

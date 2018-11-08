@@ -62,7 +62,6 @@ class MPICommunicator(object):
         return np.array_split(whole, self.size, axis=1)[self.rank]
 
     def gather(self, arg, root=0, axis=0):
-        arg = self.comm.gather(arg, root=root)  # Theta, V, H
-        if self.rank == 0:
-            return np.concatenate(arg, axis=axis)
-        return None
+        arg = self.comm.allgather(arg)  # Theta, V, H
+        return np.concatenate(arg, axis=axis)
+
